@@ -1,0 +1,233 @@
+---
+title: "Análisis de Cobertura - IPP PILOTO 2023"
+author: ""
+subtitle: Dirección de infraestructura de estadistica y muestreo (DINEM)
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    theme: cerulean
+    highlight: kate
+  pdf_document:
+    toc: yes
+---
+
+```{r, include=FALSE,echo = FALSE}
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(janitor)
+library(reshape2)
+library(DT)
+```
+
+
+```{r, message = FALSE,echo = FALSE,warning=FALSE}
+  
+#-------------------------------------------------------------------------------
+# CARGAMOS 
+#-------------------------------------------------------------------------------
+
+base_productos <- read_excel("DATA/TAMANIO PRODUCTO/TOP 5 PRODUCTOS SISTEMA CAB SIPP_21032024_V2.xlsx")%>% 
+  clean_names() %>% 
+  mutate(cpc = gsub("\\.","",as.character(cpc)),
+         precio_actual = as.numeric(precio_actual))
+
+base_productos_2 <- read_excel("DATA/TAMANIO PRODUCTO/REPORTE_PILOTO PRODUCTOS CON PRECIO MUESTRA_21032024_V2.XLSX", 
+                               sheet = "TODAS EMPRESAS") %>%
+  clean_names() %>% 
+  mutate(cpc = gsub("\\.","",as.character(cpc)),
+         precio_actual = as.numeric(precio_actual))
+
+```
+
+
+```{r, message = FALSE,echo = FALSE,warning=FALSE}
+marco_2021_canasta <- read_excel("PRODUCTOS/MARCO/marco_IPP.xlsx")
+
+data_muestra_f <- read_excel("DATA/PILOTO COBERTURA/Muestra_Empresas_CAB-SIPP_v1.xlsx", 
+                                           sheet = "Consolidado Forzosa") %>% clean_names()
+data_muestra_f <- data_muestra_f %>% left_join( select(marco_2021_canasta,id_empresa,dom_m),
+                              by="id_empresa")
+
+data_muestra_m_p <- read_excel("DATA/PILOTO COBERTURA/Muestra_Empresas_CAB-SIPP_v1.xlsx", 
+                               sheet = "Consolidado Pequeñas Medianas") %>% 
+  clean_names()
+
+```
+
+
+```{r, message = FALSE,echo = FALSE, warning=FALSE}
+
+DB1 <- data_muestra_f %>% select(id_empresa,dom_m,codigo_actividad_eco,
+                                 paste0("codigo_producto_",c(1:5))) %>% 
+  pivot_longer(
+    cols = c(paste0("codigo_producto_",c(1:5))),
+    names_to = "Producto",
+    values_to = "Codigo")
+
+DB2 <- data_muestra_m_p %>% select(id_empresa,dom_m,codigo_actividad_eco,
+                                 paste0("codigo_producto_",c(1:5))) %>% 
+  pivot_longer(
+    cols = c(paste0("codigo_producto_",c(1:5))),
+    names_to = "Producto",
+    values_to = "Codigo") %>% 
+  mutate(Codigo = gsub("\\.","",as.character(Codigo)))
+
+DB <- rbind(DB1,DB2)
+
+aux <- DB %>% filter(!is.na(Codigo)) %>% 
+  group_by(dom_m) %>% summarise(Total = n()) 
+
+#--------------------------------------------------------------------------
+# RESUMEN - LO LEVANTADO POR DOM  -----------------------------------------
+#--------------------------------------------------------------------------
+
+#duplicated(DB$id_empresa)
+aux_2 <- DB[!duplicated(DB$id_empresa),]
+
+# aux_2 %>% filter()
+# group_by(dom_m) %>% summarise(n()) %>% adorn_totals() %>% View()
+
+cobertura_dom <- aux_2 %>% 
+  filter(!is.na(Codigo)) %>%
+  group_by(dom_m) %>% 
+  summarise(total_levantado = n()) 
+
+#--------------------------------------------------------------------------
+# MUESTRA ENVIADA  --------------------------------------------------------
+#--------------------------------------------------------------------------
+
+m1 <- marco_2021_canasta %>% filter(tamanou_plazas=="5") %>% 
+  group_by(dom_m) %>% summarise(n_muestra = n())
+
+
+muestra_enviar <- read_excel("Muestra_enviar.xlsx")
+
+m2 <- muestra_enviar %>% group_by(dom_m) %>% 
+  summarise(n_muestra = n())
+
+m <- rbind(m1,m2) 
+
+tabla_levantado <- cobertura_dom %>% right_join(m,by="dom_m") %>% 
+  mutate(porcentaje_levantado = round(100*total_levantado/n_muestra,2))
+
+
+```
+
+## PORCENTAJE LEVANTADO POR DOMINIO
+
+Se tiene la agrupación por dominio que fue levanta en el pilotaje del  IPP:
+
+```{r, message = FALSE,echo = FALSE, warning=FALSE}
+
+tabla_levantado %>% #filter(grepl(dom_m,pattern = "2")) %>% 
+  ggplot(aes(x=dom_m,y=porcentaje_levantado,fill = dom_m)) + 
+  geom_bar(stat="identity", position = position_dodge()) +
+  labs(x="Dominio",y="Efectividad")+
+  #theme(legend.position = "") +
+  theme(legend.position = "",axis.text.x = element_text(angle = 90, vjust = 1, hjust=1))
+
+```
+
+```{r, message = FALSE,echo = FALSE, warning=FALSE}
+
+tabla_levantado[is.na(tabla_levantado)] <- 0
+
+datatable(
+tabla_levantado
+,filter = 'top',options = list(pageLength = 52, autoWidth = TRUE ))
+
+```
+
+## TOTAL LEVANTADO POR PRODUCTO
+
+Se evalua la cobertura en base a los productos levantados, esto con el objetivo de visualizar un panorama enfocado en los productos. 
+
+```{r, message = FALSE,echo = FALSE, warning=FALSE}
+
+DB %>% filter(!is.na(Codigo)) %>% 
+  group_by(Codigo) %>% summarise(Total=n()) %>%
+  filter(Total >= 5 ) %>% 
+  ggplot(aes(x=Codigo,y=Total,fill = Codigo)) + 
+  geom_bar(stat="identity") + 
+  theme(legend.position = "bottom",axis.text.x  = element_blank())
+
+```
+
+```{r, message = FALSE,echo = FALSE, warning=FALSE}
+datatable(
+DB %>% filter(!is.na(Codigo)) %>% 
+  group_by(Codigo) %>% summarise(Total=n())
+,filter = 'top',options = list(pageLength = 10, autoWidth = TRUE ))
+
+```
+
+
+## CALCULO DEL TAMAÑO POR PRODUCTO
+
+
+```{r, message = FALSE,echo = FALSE}
+
+nc=0.9
+z=qnorm(nc+(1-nc)/2)
+er=0.2
+
+tam <- base_productos %>% 
+  mutate(dominio = cpc,
+         v_diseno = as.numeric(precio_actual)) %>% 
+  group_by(dominio) %>% 
+  summarise(N = n(),
+            desv = sd(v_diseno,na.rm = T),
+            v_diseno_mean = mean(v_diseno,na.rm = T)) %>% 
+  mutate(numerador = (N*desv)^2,
+         denominador = ((N-1)/N)*((er*v_diseno_mean/z)^2) + N*(desv^2),
+         tam = numerador/denominador,
+         #n = tam/(1+(tam/N)),
+         n = ceiling(tam))
+
+knitr::kable(
+tam
+,align = "ccccccc" )
+
+```
+
+
+
+```{r, message = FALSE,echo = FALSE}
+
+
+nc=0.9
+z=qnorm(nc+(1-nc)/2)
+er=0.2
+
+tam2 <- base_productos_2 %>% 
+  mutate(dominio = cpc,
+         v_diseno = as.numeric(precio_actual)) %>% 
+  group_by(dominio) %>% 
+  summarise(N = n(),
+            desv = sd(v_diseno,na.rm = T),
+            v_diseno_mean = mean(v_diseno,na.rm = T)) %>% 
+  mutate(numerador = (N*desv)^2,
+         denominador = ((N-1)/N)*((er*v_diseno_mean/z)^2) + N*(desv^2),
+         tam = numerador/denominador,
+         #n = tam/(1+(tam/N)),
+         n = ceiling(tam))
+
+knitr::kable(
+tam2
+,align = "ccccccc" )
+
+```
+
+## CONCLUSIONES:
+
+* La cobertura de la prueba piloto es deficiente, esto es un obstáculo para responder a los requerimientos que se habían planteado inicialmente. 
+
+* El escenario del cálculo del tamaño para una submuestra a nivel de prodcuto es deficiente, en el ejercicio realizado el calculo del tamaño alcanza el tamaño del dominio, por lo que no es viable proceder con este nuevo calculo, esto se debe a la reducida cantidad de tomas por productos.  
+
+* El cálculo del tamaño para una submuestra se lo ha realizado a manera de ejercicio, sin embargo, cabe aclarar que debido a la deficiencia en la cobertura estos resultados y metodología no pueden ser considerados como definitivos y/o adecuados. Adicionalmente, no se contaron con los precios levantados en la prueba piloto, los datos facilitados fueron recolectados del actual IPP y sirven únicamente como ejemplo del ejercicio planteado.
+
+
+
+
