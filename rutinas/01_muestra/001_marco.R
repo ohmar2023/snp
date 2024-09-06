@@ -80,19 +80,53 @@ nc = 0.95
 z = qnorm(nc+(1-nc)/2)
 er = 0.1
 
-base_colegios %>% 
-  rename("dom" = dom_3) %>% 
+tam_est <- base_colegios %>% 
+  filter(nivel_educacion != "Educación Inicial") %>% 
+  rename("dom" = dom_2) %>% 
   group_by(dom) %>% 
-  mutate( N = n(),
+  mutate( N = sum(estudiantes_masculino_tercer_ano_bach) + sum(estudiantes_femenino_tercer_ano_bach),
     num = z^2 * N * p * q,
-    denom = er^2 * (N-1) + z^2 * p *q,
-    n_muestra = ceiling(num/denom)) %>%
-  ungroup() %>% 
+    denom = er^2 * p^2 * (N-1) + z^2 * p *q, #error absoluto
+    n_muestra = ceiling(num/denom)) %>% 
+  #select(N,estudiantes_masculino_tercer_ano_bach,estudiantes_femenino_tercer_ano_bach,
+  #       num,denom) %>% 
+  #View()
+ungroup() %>% 
   group_by(dom) %>% 
   summarise(n = unique(n_muestra),
-            N = unique(N)) %>%
-  adorn_totals() %>% 
-  View("tamano")
+            N = unique(N)) 
+
+#-------------------------------------------------------------------------------
+# Calculo media de estudiantes
+#-------------------------------------------------------------------------------
+
+med_est <- base_colegios %>% 
+  filter(nivel_educacion != "Educación Inicial") %>% 
+  rename("dom" = dom_2) %>% 
+  group_by(dom) %>% 
+  summarise( n_est = sum(estudiantes_masculino_tercer_ano_bach) + sum(estudiantes_femenino_tercer_ano_bach),
+          n_col = n(),
+          est_prom =ceiling(n_est/n_col)) 
+
+
+#-------------------------------------------------------------------------------
+# Juntando resulatdos para el tamaño final
+#-------------------------------------------------------------------------------
+
+tam_est %>% left_join(med_est) %>% 
+  mutate(tam_col = ceiling(n/est_prom)) %>% 
+  View()
+
+
+
+
+
+
+
+
+
+
+
 
 
 
