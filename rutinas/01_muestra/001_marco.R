@@ -17,24 +17,20 @@ library(rio)
 base_colegios <- read_excel("insumos/1MINEDUC_2023-2024-Inicio BBD.xlsx", 
                                              sheet = "Tabla n_01") %>% 
   clean_names() %>% 
-  mutate(dom_1 = "nacional",
-         dom_2 = tolower(provincia),
-         dom_3 = tolower(canton),
-         dom_4 = tolower(parroquia))
-
+  mutate(dom_1 = cod_canton,
+         suma_est = estudiantes_masculino_tercer_ano_bach + 
+           estudiantes_femenino_tercer_ano_bach) %>% 
+  filter(suma_est > 0) %>% 
+  select(c(1:19,61,62),dom_1,suma_est)
+  
 #-------------------------------------------------------------------------------
 # Descriptivos de la base
 #-------------------------------------------------------------------------------
 
-dim(base_colegios)
-names(base_colegios)
-
-base_colegios %>% group_by(dom_2,dom_3) %>% 
-  summarise(n()) %>% View()
 
 # --- Cantidad de colegios por provincia
 base_colegios %>%
-  rename("dom" = dom_2) %>% 
+  rename("dom" = dom_3) %>% 
   group_by(dom) %>% 
   summarise(N = n()) %>% #filter(grepl(dom_m,pattern = "2")) %>% 
   ggplot(aes(x=dom, y=N, fill = dom)) + 
@@ -61,13 +57,12 @@ base_colegios %>%
   filter(regimen_escolar == "Sierra") %>% 
   group_by(dom) %>% 
   summarise(N = n()) %>% 
-  filter(N < 30) %>% 
+  filter(N < 50) %>% 
   ggplot(aes(x=dom, y=N, fill = dom)) + 
   geom_bar(stat="identity", position = position_dodge()) +
   labs(x="",y="")+
   #theme(legend.position = "") +
   theme(legend.position = "",axis.text.x = element_text(angle = 90, vjust = 1, hjust=1))
-
 
 
 #-------------------------------------------------------------------------------
@@ -79,90 +74,65 @@ q = 0.5
 nc = 0.95
 z = qnorm(nc+(1-nc)/2)
 er = 0.1
+deff = 2
 
 tam_est <- base_colegios %>% 
-  filter(nivel_educacion != "Educación Inicial") %>% 
-  rename("dom" = dom_2) %>% 
+  rename("dom" = dom_1) %>% 
   group_by(dom) %>% 
-  mutate( N = sum(estudiantes_masculino_tercer_ano_bach) + sum(estudiantes_femenino_tercer_ano_bach),
-    num = z^2 * N * p * q,
-    denom = er^2 * p^2 * (N-1) + z^2 * p *q, #error absoluto
+  mutate( N = sum(suma_est),
+    num = z^2 * N * p * q * deff,
+    denom = er^2 * p^2 * (N-1) + z^2 * p *q *deff, #error absoluto
     n_muestra = ceiling(num/denom)) %>% 
   #select(N,estudiantes_masculino_tercer_ano_bach,estudiantes_femenino_tercer_ano_bach,
   #       num,denom) %>% 
   #View()
 ungroup() %>% 
   group_by(dom) %>% 
-  summarise(n = unique(n_muestra),
-            N = unique(N)) 
+  summarise(est_muestra = unique(n_muestra),
+            est_total = unique(N),
+            col_total = n()) 
 
 #-------------------------------------------------------------------------------
 # Calculo media de estudiantes
 #-------------------------------------------------------------------------------
 
 med_est <- base_colegios %>% 
-  filter(nivel_educacion != "Educación Inicial") %>% 
-  rename("dom" = dom_2) %>% 
+  rename("dom" = dom_1) %>% 
   group_by(dom) %>% 
-  summarise( n_est = sum(estudiantes_masculino_tercer_ano_bach) + sum(estudiantes_femenino_tercer_ano_bach),
-          n_col = n(),
-          est_prom =ceiling(n_est/n_col)) 
+  summarise(est_total = sum(suma_est),
+            col_total = n(),
+            est_prom = mean(suma_est),
+            q_1 = ceiling(quantile(suma_est,probs = c(0.2)))) 
 
 
 #-------------------------------------------------------------------------------
 # Juntando resulatdos para el tamaño final
 #-------------------------------------------------------------------------------
 
-tam_est %>% left_join(med_est) %>% 
-  mutate(tam_col = ceiling(n/est_prom)) %>% 
-  View()
+tam_final <- tam_est %>% left_join(med_est) %>% 
+  mutate(col_muestra = ceiling(est_muestra/q_1)) %>% 
+  select(dom, est_total, est_muestra, est_prom, q_1, col_total, col_muestra)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-marco_canasta_08 <- directorio %>% 
-  filter(codigo_actividad_eco %in% canasta$codigo_actividad_eco,
-         tamanou_plazas!=1) %>% 
-  filter(situacion == 1) %>%
-  #filtro las empresas no ubicadas
-  filter(is.na(empresas_noubicadas)) %>%
-  mutate(
-    dom_1 = codigo_seccion,
-    dom_2 = paste0(tamanou_plazas, codigo_seccion),
-    id_empresa = as.character(id_empresa)) %>% 
-  group_by(dom_2) %>% 
-  mutate(n_cod_act_eco = n_distinct(codigo_actividad_eco)) %>% 
-  ungroup()
-# 
-# marco_canasta_08 %>% 
-#   select(dom_2,n_cod_act_eco) %>% 
-#   distinct(dom_2,n_cod_act_eco) %>% View("UNO")
-# 
-# marco_canasta_08 %>% filter(dom_2=="4A") %>% 
-#   select(dom_2,n_cod_act_eco) %>% 
-#   distinct(dom_2,n_cod_act_eco) %>% View()
-
+ggplot(data = base_colegios, mapping = aes(x=suma_est)) + geom_boxplot(outlier.colour="pink")
 
 #-------------------------------------------------------------------------------
-# EXPORTANDO MARCO CANASTA 2021 
+# EXPORTANDO MARCO Y TAMAÑO DE MUESTRA 
 #-------------------------------------------------------------------------------
-export(marco_canasta_08,
-       "productos/01_marco/marco_canasta_08.rds")
+export(base_colegios,
+       "productos/01_muestra/base_colegios_marco.rds")
+
+export(tam_final,
+       "productos/01_muestra/tamanio.rds")
+
+
+
+
+
+
+
+
+
+
+
 
