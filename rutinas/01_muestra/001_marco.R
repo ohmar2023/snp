@@ -1,14 +1,16 @@
 rm(list = ls())
 
+{
 library(tidyverse)
 library(readxl)
 library(reshape2)
 library(janitor)
 library(dplyr)
 library(readxl)
-library(xlsx)
+#library(xlsx)
 library(openxlsx)
 library(rio)
+}
 
 #-------------------------------------------------------------------------------
 # LECTURA DE LA BDD DEL MINISTERIO DE EDUCACIÓN
@@ -19,14 +21,16 @@ base_colegios <- read_excel("insumos/1MINEDUC_2023-2024-Inicio BBD.xlsx",
   clean_names() %>% 
   mutate(dom_1 = cod_canton,
          suma_est = estudiantes_masculino_tercer_ano_bach + 
-           estudiantes_femenino_tercer_ano_bach) %>% 
-  filter(suma_est > 0) %>% 
+           estudiantes_femenino_tercer_ano_bach,
+         aux = substr(cod_canton,3,4)) %>% 
+  filter(suma_est > 0,
+         tipo_educacion == "Ordinario",
+         aux == "01") %>% 
   select(c(1:19,61,62),dom_1,suma_est)
   
 #-------------------------------------------------------------------------------
 # Descriptivos de la base
 #-------------------------------------------------------------------------------
-
 
 # --- Cantidad de colegios por provincia
 base_colegios %>%
@@ -124,8 +128,8 @@ export(base_colegios,
 
 export(tam_final,
        "productos/01_muestra/tamanio.rds")
-
-
+export(tam_final,
+       "productos/01_muestra/tamanio.xlsx")
 
 
 

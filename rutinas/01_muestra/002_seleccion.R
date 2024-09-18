@@ -26,17 +26,11 @@ tamanio <- readRDS("productos/01_muestra/tamanio.rds")
 #-------------------------------------------------------------------------------
 marco <- readRDS("productos/01_muestra/base_colegios_marco.rds")
 
-
-
-
-
 # ------------------------------------------------------------------------------
-# PPT MINIMO 5 -----------------------------------------------------------------
-# En caso de que no hayan 5 en el estrato, se toman todos y el resto del tamaño 
-# muetsral se lo hace PPT entre los estratos que tengan empresas disponibles. 
+# SELECCIÓN DE COLEGIOS
 # ------------------------------------------------------------------------------
 
-marco_aux <- marco %>% 
+selec_col <- marco %>% 
   rename(dom = "dom_1") %>%
   left_join(tamanio) %>% 
   group_by(dom) %>% 
@@ -46,10 +40,17 @@ marco_aux <- marco %>%
     filter(sel == 1)
 
 #--- Control ---
-marco_aux %>% group_by(dom) %>% summarise(selec = n(),
+selec_col %>% group_by(dom) %>% summarise(selec = n(),
                                           tam = unique(col_muestra),
                                           dif = selec - tam) %>% View()
   
+
+# ------------------------------------------------------------------------------
+# SELECCIÓN DE ESTUDIANTES
+# ------------------------------------------------------------------------------
+
+selec_col %>% mutate()
+
 aux <- marco_sin_inc_for %>% 
   group_by(dom_2,codigo_actividad_eco) %>% 
   summarise(Nh=n()) %>% 
